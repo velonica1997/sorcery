@@ -32,11 +32,7 @@ module Sorcery
         @current_user = nil
         user = user_class.authenticate(*credentials)
         if user
-          old_session = session.dup.to_hash
           reset_sorcery_session
-          old_session.each_pair do |k,v|
-            session[k.to_sym] = v
-          end
           form_authenticity_token
 
           auto_login(user)
@@ -52,7 +48,15 @@ module Sorcery
       # hotfix for https://github.com/NoamB/sorcery/issues/464
       # can be removed when Rails 4.1 is out
       def reset_sorcery_session
-        reset_session # protect from session fixation attacks
+        old_session = session.dup.to_hash
+        old_session.delete :session_id # protect from session fixation attacks
+
+        # remove session used in sorcery
+        unsorcery_session = old_session.reject { |key, _| sorcery_session_keys.include? key.to_sym }
+        reset_session
+        unsorcery_session.each do |key, value|
+          session[key.to_sym] = value
+        end
       rescue NoMethodError
       end
 
@@ -151,6 +155,15 @@ module Sorcery
         @user_class ||= Config.user_class.to_s.constantize
       end
 
+      private
+
+      def sorcery_session_keys
+        [
+          :user_id, :http_authentication_used, :login_time,
+          :request_token, :request_token_secret, :last_action_time,
+          :return_to_url, :incomplete_user
+        ]
+      end
     end
 
   end
